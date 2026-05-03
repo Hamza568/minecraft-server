@@ -1,6 +1,4 @@
-# ── Stage 1: download assets ──────────────────────────────────────────────────
-# Uses a plain Alpine image to fetch the Minecraft server JAR and Filebrowser
-# binary so the runtime image stays minimal.
+# ── Stage 1: download Paper JAR ───────────────────────────────────────────────
 FROM alpine:3.21 AS downloader
 
 RUN apk add --no-cache curl jq
@@ -20,40 +18,43 @@ RUN set -eux; \
         "$PAPER_API/versions/$VERSION/builds/$BUILD/downloads/$JAR"; \
     echo ">>> Downloaded $JAR"
 
-# Install Filebrowser from the official install script (resolves latest release)
-RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
-
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM eclipse-temurin:17-jre-alpine
 
-# bash is required by the entrypoint script
-RUN apk add --no-cache bash
+# nodejs/npm are available in Alpine's packages (Node 22 on Alpine 3.21)
+RUN apk add --no-cache nodejs npm
 
-# Copy assets from the downloader stage — nothing else carries over
-COPY --from=downloader /server.jar          /server.jar
-COPY --from=downloader /usr/local/bin/filebrowser /usr/local/bin/filebrowser
+COPY --from=downloader /server.jar /server.jar
 
-# Entrypoint manages both services
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Install panel dependencies in a separate layer so Docker can cache it
+# independently from source changes.
+COPY panel/package.json /panel/package.json
+RUN cd /panel && npm install --omit=dev && npm cache clean --force
+
+# Copy panel source (only invalidates the layer above when source changes)
+COPY panel/ /panel/
 
 # ── Runtime configuration ──────────────────────────────────────────────────────
-# EULA        – must be set to "true" to start the server
-# MAX_MEMORY  – JVM heap ceiling  (e.g. 2G, 4G)
-# MIN_MEMORY  – JVM heap floor    (e.g. 512M, 1G)
-# JVM_OPTS    – additional JVM flags (e.g. -XX:+UseG1GC)
+# EULA           – must be "true" for the server to start
+# MAX_MEMORY     – JVM heap ceiling   (e.g. 2G)
+# MIN_MEMORY     – JVM heap floor     (e.g. 512M)
+# JVM_OPTS       – extra JVM flags    (e.g. -XX:+UseG1GC)
+# PANEL_PASSWORD – web UI password    (default: admin — change this!)
+# AUTO_START     – start MC on boot when EULA=true (default: true)
 ENV EULA=false \
     MAX_MEMORY=1G \
     MIN_MEMORY=512M \
-    JVM_OPTS=""
+    JVM_OPTS="" \
+    PANEL_PASSWORD=admin \
+    AUTO_START=true
 
-# All server files, world data, and Filebrowser's database live here.
-# Mount a persistent volume at /data on Railway (or any Docker host).
+# All world saves, configs, plugins, and panel state live here.
+# Mount a Railway volume at /data so nothing is lost on redeploy.
 VOLUME ["/data"]
 WORKDIR /data
 
-# 25565 – Minecraft Java Edition
-# 80    – Filebrowser web UI
+# 25565 – Minecraft Java Edition (TCP)
+# 80    – Web panel (HTTP)
 EXPOSE 25565 80
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["node", "/panel/server.js"]
