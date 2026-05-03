@@ -48,9 +48,6 @@ ENV EULA=false \
     PANEL_PASSWORD=admin \
     AUTO_START=true
 
-# All world saves, configs, plugins, and panel state live here.
-# Mount a Railway volume at /data so nothing is lost on redeploy.
-VOLUME ["/data"]
 WORKDIR /data
 
 # 25565 – Minecraft Java Edition (TCP)
