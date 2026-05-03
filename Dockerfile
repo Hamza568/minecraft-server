@@ -3,61 +3,58 @@ FROM alpine:3.21 AS downloader
 
 RUN apk add --no-cache curl jq
 
-# Resolve the latest stable Paper build via the PaperMC API in 2 calls:
-#   1. Get the latest version group (e.g. "1.21")
-#   2. Get all builds for that group, filter channel == "STABLE", take newest
-# The version_group endpoint covers all 1.21.x sub-versions at once, so we
-# never need to loop over individual versions.
+# PaperMC migrated to Fill v3 (fill.papermc.io/v3) which supports the new
+# Minecraft versioning scheme (26.x). Download URLs are embedded in API
+# responses — we never construct them manually.
+# Iterates versions newest-first until it finds one with a STABLE build.
 RUN set -eux; \
-    PAPER_API="https://api.papermc.io/v2/projects/paper"; \
-    GROUP=$(curl -fsSL "$PAPER_API" | jq -r '.version_groups[-1]'); \
-    echo ">>> Version group: $GROUP"; \
-    STABLE=$(curl -fsSL "$PAPER_API/version_group/$GROUP/builds" \
-        | jq -r '[.builds[] | select(.channel == "STABLE")] | last | "\(.version) \(.build)"'); \
-    VERSION=$(echo "$STABLE" | cut -d' ' -f1); \
-    BUILD=$(echo "$STABLE" | cut -d' ' -f2); \
-    [ -n "$BUILD" ] && [ "$BUILD" != "null" ] || { echo "ERROR: no STABLE Paper build found"; exit 1; }; \
-    echo ">>> Paper $VERSION build $BUILD"; \
-    JAR="paper-${VERSION}-${BUILD}.jar"; \
-    curl -fsSL -o /server.jar \
-        "$PAPER_API/versions/$VERSION/builds/$BUILD/downloads/$JAR"; \
-    echo ">>> Downloaded $JAR"
+    FILL="https://fill.papermc.io/v3/projects/paper"; \
+    UA="mc-panel/1.0 (dockerfile)"; \
+    URL=""; VERSION=""; \
+    for V in $(curl -fsSL -H "User-Agent: $UA" "$FILL" | jq -r '.versions | reverse | .[]'); do \
+        URL=$(curl -fsSL -H "User-Agent: $UA" "$FILL/versions/$V/builds" \
+            | jq -r 'map(select(.channel == "STABLE")) | .[0] | .downloads."server:default".url // empty'); \
+        if [ -n "$URL" ] && [ "$URL" != "null" ]; then VERSION="$V"; break; fi; \
+    done; \
+    [ -n "$URL" ] || { echo "ERROR: no STABLE Paper build found"; exit 1; }; \
+    echo ">>> Downloading Paper $VERSION from $URL"; \
+    curl -fsSL -H "User-Agent: $UA" -o /server.jar "$URL"; \
+    echo ">>> Download complete"
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+# Minecraft 26.1+ requires Java 25. eclipse-temurin:25-jre-alpine is the
+# official lightweight JRE image for Java 25.
+FROM eclipse-temurin:25-jre-alpine
 
-# nodejs/npm are available in Alpine's packages (Node 22 on Alpine 3.21)
+# nodejs/npm from Alpine's packages
 RUN apk add --no-cache nodejs npm
 
 COPY --from=downloader /server.jar /server.jar
 
-# Install panel dependencies in a separate layer so Docker can cache it
-# independently from source changes.
+# Install panel dependencies in a separate layer for Docker cache efficiency
 COPY panel/package.json /panel/package.json
 RUN cd /panel && npm install --omit=dev && npm cache clean --force
 
-# Copy panel source (only invalidates the layer above when source changes)
+# Copy panel source
 COPY panel/ /panel/
 
 # ── Runtime configuration ──────────────────────────────────────────────────────
 # EULA           – must be "true" for the server to start
 # MAX_MEMORY     – JVM heap ceiling   (e.g. 2G)
 # MIN_MEMORY     – JVM heap floor     (e.g. 512M)
-# JVM_OPTS       – extra JVM flags    (e.g. -XX:+UseG1GC)
-# PANEL_PASSWORD – web UI password    (default: admin — change this!)
+# JVM_OPTS       – extra JVM flags
 # AUTO_START     – start MC on boot when EULA=true (default: true)
+# PANEL_PASSWORD – set via Railway's Variables tab (never bake into the image)
 ENV EULA=false \
     MAX_MEMORY=1G \
     MIN_MEMORY=512M \
     JVM_OPTS="" \
     AUTO_START=true
-# PANEL_PASSWORD is intentionally not set here — provide it via Railway's
-# environment variable panel so it never bakes into the image.
 
 WORKDIR /
 
-# 25565 – Minecraft Java Edition (TCP proxy — configure in Railway networking tab)
-# HTTP panel port is handled via Railway's PORT env var (always 8080 on Railway)
+# 25565 – Minecraft Java Edition TCP (configure TCP proxy in Railway networking)
+# HTTP panel runs on Railway's injected PORT (always 8080)
 EXPOSE 25565
 
 ENTRYPOINT ["node", "/panel/server.js"]
