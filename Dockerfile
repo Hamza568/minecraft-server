@@ -3,23 +3,22 @@ FROM alpine:3.21 AS downloader
 
 RUN apk add --no-cache curl jq
 
-# PaperMC migrated to Fill v3 (fill.papermc.io/v3) which supports the new
-# Minecraft versioning scheme (26.x). Download URLs are embedded in API
-# responses — we never construct them manually.
-# Iterates versions newest-first until it finds one with a STABLE build.
+# Fill v3 API (fill.papermc.io/v3) supports the new Minecraft versioning (26.x).
+# Only checks the 3 newest versions — avoids looping all 60+ historical versions.
+# In practice this resolves in 2 HTTP calls: versions list + one builds query.
 RUN set -eux; \
     FILL="https://fill.papermc.io/v3/projects/paper"; \
-    UA="mc-panel/1.0 (dockerfile)"; \
+    UA="User-Agent: mc-panel/1.0 (dockerfile)"; \
     URL=""; VERSION=""; \
-    for V in $(curl -fsSL -H "User-Agent: $UA" "$FILL" | jq -r '.versions | reverse | .[]'); do \
-        URL=$(curl -fsSL -H "User-Agent: $UA" "$FILL/versions/$V/builds" \
+    for V in $(curl -fsSL -H "$UA" "$FILL" | jq -r '.versions[-3:] | reverse | .[]'); do \
+        URL=$(curl -fsSL -H "$UA" "$FILL/versions/$V/builds" \
             | jq -r 'map(select(.channel == "STABLE")) | .[0] | .downloads."server:default".url // empty'); \
         if [ -n "$URL" ] && [ "$URL" != "null" ]; then VERSION="$V"; break; fi; \
     done; \
     [ -n "$URL" ] || { echo "ERROR: no STABLE Paper build found"; exit 1; }; \
-    echo ">>> Downloading Paper $VERSION from $URL"; \
-    curl -fsSL -H "User-Agent: $UA" -o /server.jar "$URL"; \
-    echo ">>> Download complete"
+    echo ">>> Downloading Paper $VERSION"; \
+    curl -fsSL -H "$UA" -o /server.jar "$URL"; \
+    echo ">>> Done"
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 # Minecraft 26.1+ requires Java 25. eclipse-temurin:25-jre-alpine is the
