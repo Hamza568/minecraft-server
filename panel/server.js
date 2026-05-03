@@ -287,9 +287,9 @@ process.on('SIGTERM', () => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-server.listen(PANEL_PORT, () => {
+server.listen(PANEL_PORT, '0.0.0.0', () => {
   const pwWarn = PANEL_PASSWORD === 'admin' ? '  ⚠ Change PANEL_PASSWORD!' : '';
-  console.log(`[panel] Listening on :${PANEL_PORT}${pwWarn}`);
+  console.log(`[panel] Listening on 0.0.0.0:${PANEL_PORT}  (PORT=${process.env.PORT ?? 'unset'} PANEL_PORT=${process.env.PANEL_PORT ?? 'unset'})${pwWarn}`);
   console.log(`[panel] EULA=${EULA_ACCEPTED}  AUTO_START=${AUTO_START}`);
 
   if (AUTO_START && EULA_ACCEPTED) {

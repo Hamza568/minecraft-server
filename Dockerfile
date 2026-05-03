@@ -56,8 +56,8 @@ ENV EULA=false \
 
 WORKDIR /data
 
-# 25565 – Minecraft Java Edition (TCP)
-# 80    – Web panel (HTTP)
-EXPOSE 25565 80
+# 25565 – Minecraft Java Edition (TCP proxy — configure in Railway networking tab)
+# HTTP panel port is handled via Railway's PORT env var (always 8080 on Railway)
+EXPOSE 25565
 
 ENTRYPOINT ["node", "/panel/server.js"]
