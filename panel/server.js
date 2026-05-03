@@ -13,7 +13,8 @@ const multer   = require('multer');
 // ── Config ────────────────────────────────────────────────────────────────────
 const DATA_DIR       = process.env.DATA_DIR       || '/data';
 const SERVER_JAR     = '/server.jar';
-const PANEL_PORT     = parseInt(process.env.PANEL_PORT || '80', 10);
+// Railway injects PORT for its HTTP proxy; fall back to PANEL_PORT then 80
+const PANEL_PORT     = parseInt(process.env.PORT || process.env.PANEL_PORT || '80', 10);
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD  || 'admin';
 const MAX_MEMORY     = process.env.MAX_MEMORY      || '1G';
 const MIN_MEMORY     = process.env.MIN_MEMORY      || '512M';

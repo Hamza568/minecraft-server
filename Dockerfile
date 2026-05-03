@@ -50,8 +50,9 @@ ENV EULA=false \
     MAX_MEMORY=1G \
     MIN_MEMORY=512M \
     JVM_OPTS="" \
-    PANEL_PASSWORD=admin \
     AUTO_START=true
+# PANEL_PASSWORD is intentionally not set here — provide it via Railway's
+# environment variable panel so it never bakes into the image.
 
 WORKDIR /data
 
