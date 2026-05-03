@@ -136,16 +136,21 @@ function sendCommand(cmd) {
 const app    = express();
 const server = http.createServer(app);
 
+// Public health check — no auth required
+app.get('/ping', (req, res) => res.json({ ok: true, passwordLength: PANEL_PASSWORD.trim().length }));
+
 // Basic auth — every request must pass before reaching any route
 app.use((req, res, next) => {
   const auth = req.headers.authorization || '';
   if (auth.startsWith('Basic ')) {
-    const colon = Buffer.from(auth.slice(6), 'base64').toString().indexOf(':');
-    const pass  = Buffer.from(auth.slice(6), 'base64').toString().slice(colon + 1);
-    if (pass === PANEL_PASSWORD) {
-      // Deliver the WS token so the client can open an authenticated WS connection
-      res.setHeader('X-WS-Token', WS_TOKEN);
-      return next();
+    const decoded  = Buffer.from(auth.slice(6), 'base64').toString('utf8');
+    const colonIdx = decoded.indexOf(':');
+    if (colonIdx !== -1) {
+      const pass = decoded.slice(colonIdx + 1).trim();
+      if (pass === PANEL_PASSWORD.trim()) {
+        res.setHeader('X-WS-Token', WS_TOKEN);
+        return next();
+      }
     }
   }
   res.setHeader('WWW-Authenticate', 'Basic realm="MC Panel"');
