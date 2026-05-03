@@ -3,14 +3,15 @@ FROM alpine:3.21 AS downloader
 
 RUN apk add --no-cache curl jq
 
-# Fill v3 API (fill.papermc.io/v3) supports the new Minecraft versioning (26.x).
-# Only checks the 3 newest versions — avoids looping all 60+ historical versions.
-# In practice this resolves in 2 HTTP calls: versions list + one builds query.
+# Fill v3 API returns versions as a grouped object: {"26.1":["26.1.2",...],...}
+# Flatten to a list newest-first, check the first 5 for a STABLE build.
+# Normally resolves in 2 HTTP calls: project info + first version's builds.
 RUN set -eux; \
     FILL="https://fill.papermc.io/v3/projects/paper"; \
     UA="User-Agent: mc-panel/1.0 (dockerfile)"; \
     URL=""; VERSION=""; \
-    for V in $(curl -fsSL -H "$UA" "$FILL" | jq -r '.versions[-3:] | reverse | .[]'); do \
+    for V in $(curl -fsSL -H "$UA" "$FILL" \
+        | jq -r '[.versions | to_entries[] | .value[]] | .[0:5] | .[]'); do \
         URL=$(curl -fsSL -H "$UA" "$FILL/versions/$V/builds" \
             | jq -r 'map(select(.channel == "STABLE")) | .[0] | .downloads."server:default".url // empty'); \
         if [ -n "$URL" ] && [ "$URL" != "null" ]; then VERSION="$V"; break; fi; \
