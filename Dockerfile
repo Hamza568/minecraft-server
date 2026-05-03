@@ -54,7 +54,7 @@ ENV EULA=false \
 # PANEL_PASSWORD is intentionally not set here — provide it via Railway's
 # environment variable panel so it never bakes into the image.
 
-WORKDIR /data
+WORKDIR /
 
 # 25565 – Minecraft Java Edition (TCP proxy — configure in Railway networking tab)
 # HTTP panel port is handled via Railway's PORT env var (always 8080 on Railway)

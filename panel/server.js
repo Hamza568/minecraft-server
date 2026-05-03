@@ -11,7 +11,7 @@ const crypto   = require('crypto');
 const multer   = require('multer');
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const DATA_DIR       = process.env.DATA_DIR       || '/data';
+const DATA_DIR       = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.DATA_DIR || '/data';
 const SERVER_JAR     = '/server.jar';
 // Railway injects PORT for its HTTP proxy; fall back to PANEL_PORT then 80
 const PANEL_PORT     = parseInt(process.env.PORT || process.env.PANEL_PORT || '80', 10);
@@ -290,7 +290,7 @@ process.on('SIGTERM', () => {
 server.listen(PANEL_PORT, '0.0.0.0', () => {
   const pwWarn = PANEL_PASSWORD === 'admin' ? '  ⚠ Change PANEL_PASSWORD!' : '';
   console.log(`[panel] Listening on 0.0.0.0:${PANEL_PORT}  (PORT=${process.env.PORT ?? 'unset'} PANEL_PORT=${process.env.PANEL_PORT ?? 'unset'})${pwWarn}`);
-  console.log(`[panel] EULA=${EULA_ACCEPTED}  AUTO_START=${AUTO_START}`);
+  console.log(`[panel] EULA=${EULA_ACCEPTED}  AUTO_START=${AUTO_START}  DATA_DIR=${DATA_DIR}`);
 
   if (AUTO_START && EULA_ACCEPTED) {
     setTimeout(() => {
