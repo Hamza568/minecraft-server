@@ -3,20 +3,20 @@ FROM alpine:3.21 AS downloader
 
 RUN apk add --no-cache curl jq
 
-# Resolve the latest stable Paper build dynamically via the PaperMC API.
-# Iterates versions newest-first so a newly released version with no stable
-# builds yet (channel != "default") is skipped automatically.
+# Resolve the latest stable Paper build via the PaperMC API in 2 calls:
+#   1. Get the latest version group (e.g. "1.21")
+#   2. Get all builds for that group, filter channel == "STABLE", take newest
+# The version_group endpoint covers all 1.21.x sub-versions at once, so we
+# never need to loop over individual versions.
 RUN set -eux; \
     PAPER_API="https://api.papermc.io/v2/projects/paper"; \
-    VERSION=""; BUILD=""; \
-    for V in $(curl -fsSL "$PAPER_API" | jq -r '.versions | reverse | .[]'); do \
-        B=$(curl -fsSL "$PAPER_API/versions/$V/builds" \
-            | jq -r '[.builds[] | select(.channel == "default")] | last | .build // empty'); \
-        if [ -n "$B" ] && [ "$B" != "null" ]; then \
-            VERSION="$V"; BUILD="$B"; break; \
-        fi; \
-    done; \
-    [ -n "$BUILD" ] || { echo "ERROR: no stable Paper build found"; exit 1; }; \
+    GROUP=$(curl -fsSL "$PAPER_API" | jq -r '.version_groups[-1]'); \
+    echo ">>> Version group: $GROUP"; \
+    STABLE=$(curl -fsSL "$PAPER_API/version_group/$GROUP/builds" \
+        | jq -r '[.builds[] | select(.channel == "STABLE")] | last | "\(.version) \(.build)"'); \
+    VERSION=$(echo "$STABLE" | cut -d' ' -f1); \
+    BUILD=$(echo "$STABLE" | cut -d' ' -f2); \
+    [ -n "$BUILD" ] && [ "$BUILD" != "null" ] || { echo "ERROR: no STABLE Paper build found"; exit 1; }; \
     echo ">>> Paper $VERSION build $BUILD"; \
     JAR="paper-${VERSION}-${BUILD}.jar"; \
     curl -fsSL -o /server.jar \
