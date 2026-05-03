@@ -24,7 +24,7 @@ RUN set -eux; \
     echo ">>> Downloaded $JAR"
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 # nodejs/npm are available in Alpine's packages (Node 22 on Alpine 3.21)
 RUN apk add --no-cache nodejs npm
