@@ -4,15 +4,20 @@ FROM alpine:3.21 AS downloader
 RUN apk add --no-cache curl jq
 
 # Resolve the latest stable Paper build dynamically via the PaperMC API.
-# Step 1 – latest supported MC version; Step 2 – latest "default" (stable) build;
-# Step 3 – download the JAR from the canonical URL.
+# Iterates versions newest-first so a newly released version with no stable
+# builds yet (channel != "default") is skipped automatically.
 RUN set -eux; \
     PAPER_API="https://api.papermc.io/v2/projects/paper"; \
-    VERSION=$(curl -fsSL "$PAPER_API" | jq -r '.versions[-1]'); \
-    echo ">>> Paper version: $VERSION"; \
-    BUILD=$(curl -fsSL "$PAPER_API/versions/$VERSION/builds" \
-        | jq -r '[.builds[] | select(.channel == "default")] | last | .build'); \
-    echo ">>> Paper build: $BUILD"; \
+    VERSION=""; BUILD=""; \
+    for V in $(curl -fsSL "$PAPER_API" | jq -r '.versions | reverse | .[]'); do \
+        B=$(curl -fsSL "$PAPER_API/versions/$V/builds" \
+            | jq -r '[.builds[] | select(.channel == "default")] | last | .build // empty'); \
+        if [ -n "$B" ] && [ "$B" != "null" ]; then \
+            VERSION="$V"; BUILD="$B"; break; \
+        fi; \
+    done; \
+    [ -n "$BUILD" ] || { echo "ERROR: no stable Paper build found"; exit 1; }; \
+    echo ">>> Paper $VERSION build $BUILD"; \
     JAR="paper-${VERSION}-${BUILD}.jar"; \
     curl -fsSL -o /server.jar \
         "$PAPER_API/versions/$VERSION/builds/$BUILD/downloads/$JAR"; \
